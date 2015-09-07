@@ -7,14 +7,16 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 )
 
 var (
-	cmdRe = regexp.MustCompile(`(\w+)(?: (.+))?`)
-	repRe = regexp.MustCompile(`\$(\d+|file|dir|path|target|fulltarget|\$)`)
+	cmdRe  = regexp.MustCompile(`(\w+)(?: (.+))?`)
+	repRe  = regexp.MustCompile(`\$(\d+|file|dir|path|target|fulltarget|\$)`)
+	homeRe = regexp.MustCompile(`^~([^/]*)(?:/|$)`)
 )
 
 var (
@@ -35,9 +37,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not read target: ", err)
 	}
-	if len(targetB) == 0 {
-		log.Fatal("Target was empty")
-	}
 	target := string(targetB)
 
 	// convert cursor to a byte index
@@ -49,11 +48,13 @@ func main() {
 		*cursor -= 1
 	}
 
+	*workingDir = fixhome(*workingDir)
 	err = os.Chdir(*workingDir)
 	if err != nil {
 		log.Fatal("Could not change working directory to ", workingDir, ": ", err)
 	}
 
+	*plumbPath = fixhome(*plumbPath)
 	file, err := os.Open(*plumbPath)
 	if err != nil {
 		log.Fatal("Could not open the rule file: ", err)
@@ -164,10 +165,30 @@ func echo(r ruleState, arg string) {
 	fmt.Println(format(arg, r))
 }
 
-func checkpath(r *ruleState, arg string, kind string) bool {
-	path, err := filepath.Abs(format(arg, *r))
+func fixhome(path string) string {
+	match := homeRe.FindStringSubmatch(path)
+	if match == nil {
+		return path
+	}
+
+	var usr *user.User
+	var err error
+	if match[1] == "" {
+		usr, err = user.Current()
+	} else {
+		usr, err = user.Lookup(match[1])
+	}
 	if err != nil {
-		log.Fatal("Could not determine the path of ", arg, ": ", err)
+		return path
+	}
+	return filepath.Join(usr.HomeDir, path[len(match[0]):])
+}
+
+func checkpath(r *ruleState, arg string, kind string) bool {
+	path, err := filepath.Abs(fixhome(format(arg, *r)))
+	if err != nil {
+		log.Println("Could not determine the path of ", arg, ": ", err)
+		return false
 	}
 	r.path = path
 	fi, err := os.Stat(path)
@@ -175,7 +196,8 @@ func checkpath(r *ruleState, arg string, kind string) bool {
 		return kind == "notexist"
 	}
 	if err != nil {
-		log.Fatal("Could not examine path ", path, ": ", err)
+		log.Println("Could not examine path ", path, ": ", err)
+		return false
 	}
 	if kind == "notexist" {
 		return false
