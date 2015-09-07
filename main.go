@@ -1,14 +1,20 @@
 package main
 
 import (
-	"fmt"
 	"bufio"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
-	"strings"
+	"strconv"
+)
+
+var (
+	cmdRe = regexp.MustCompile(`(\w+)(?: (.+))?`)
+	repRe = regexp.MustCompile(`\$(\d+|file|dir|path|target|fulltarget|\$)`)
 )
 
 var (
@@ -61,27 +67,51 @@ func main() {
 	}
 }
 
+type ruleState struct {
+	fullTarget, target string
+	groups             []int
+	file, dir, path    string
+	firstMatchDone     bool
+}
+
 func attemptRule(target string, scanner *bufio.Scanner) bool {
-	var lastRegexp *regexp.Regexp
-	var groups []int
+	state := ruleState{fullTarget: target, target: target}
+
 	defer readTillEndOfRule(scanner)
 	for scanner.Scan() {
-		if scanner.Text() == "" {
+		cmd := cmdRe.FindStringSubmatch(scanner.Text())
+		if cmd == nil {
 			return true
 		}
-		line := strings.Split(scanner.Text(), " ")
 
-		switch line[0] {
+		switch cmd[1] {
 		case "matches":
-			if len(line) == 1 {
-				log.Fatal("Incorrect syntax on line ", scanner.Text())
-			}
-			if !match(&target, &lastRegexp, &groups, line[1:]) {
+			if !match(&state, cmd[2]) {
 				return false
 			}
 
 		case "echo":
-			echo(line[1:], target, lastRegexp, groups)
+			echo(state, cmd[2])
+
+		case "isfile":
+			if !checkpath(&state, cmd[2], "file") {
+				return false
+			}
+
+		case "isdir":
+			if !checkpath(&state, cmd[2], "dir") {
+				return false
+			}
+
+		case "isexist":
+			if !checkpath(&state, cmd[2], "exist") {
+				return false
+			}
+
+		case "isnotexist":
+			if !checkpath(&state, cmd[2], "notexist") {
+				return false
+			}
 
 		default:
 			log.Fatal("Could not parse line: ", scanner.Text())
@@ -96,33 +126,96 @@ func readTillEndOfRule(scanner *bufio.Scanner) {
 	}
 }
 
-func match(target *string, lastRegexp **regexp.Regexp, groups *[]int, args []string) bool {
-	re, err := regexp.Compile(strings.Join(args, " "))
+func match(r *ruleState, arg string) bool {
+	if arg == "" {
+		log.Fatal("matches needs a regexp as an argument, got none")
+	}
+	re, err := regexp.Compile(arg)
 	if err != nil {
 		log.Fatal("Incorrect regexp: ", err)
 	}
 
-	if *lastRegexp == nil {
-		hits := re.FindAllStringIndex(*target, -1)
+	if !r.firstMatchDone {
+		hits := re.FindAllStringSubmatchIndex(r.target, -1)
 		for _, hit := range hits {
 			if *cursor < hit[0] || hit[1] < *cursor {
 				continue
 			}
-			*lastRegexp = re
-			*target = (*target)[hit[0]:hit[1]]
+			r.firstMatchDone = true
+			r.target = r.target[hit[0]:hit[1]]
+			shift := hit[0]
+			for i := range hit {
+				hit[i] -= shift
+			}
+			r.groups = hit
 			return true
 		}
 		return false
 	}
 
-	*groups = re.FindStringSubmatchIndex(*target)
-	*lastRegexp = re
-	if (*groups)[0] != 0 || (*groups)[1] != len(*target) {
+	r.groups = re.FindStringSubmatchIndex(r.target)
+	if r.groups == nil || r.groups[0] != 0 || r.groups[1] != len(r.target) {
 		return false
 	}
 	return true
 }
 
-func echo(args []string, target string, re *regexp.Regexp, groups []int) {
-	fmt.Println(string(re.ExpandString(nil, strings.Join(args, " "), target, groups)))
+func echo(r ruleState, arg string) {
+	fmt.Println(format(arg, r))
+}
+
+func checkpath(r *ruleState, arg string, kind string) bool {
+	path, err := filepath.Abs(format(arg, *r))
+	if err != nil {
+		log.Fatal("Could not determine the path of ", arg, ": ", err)
+	}
+	r.path = path
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return kind == "notexist"
+	}
+	if err != nil {
+		log.Fatal("Could not examine path ", path, ": ", err)
+	}
+	if kind == "notexist" {
+		return false
+	}
+	if kind == "exist" {
+		return true
+	}
+	if kind == "dir" {
+		r.dir = path
+	} else {
+		r.file = path
+	}
+	return (kind == "dir") == fi.IsDir()
+}
+
+func format(template string, r ruleState) string {
+	return repRe.ReplaceAllStringFunc(template, func(pattern string) string {
+		pattern = pattern[1:]
+		switch pattern {
+		case "$":
+			return "$"
+		case "file":
+			return r.file
+		case "dir":
+			return r.dir
+		case "path":
+			return r.path
+		case "target":
+			return r.target
+		case "fulltarget":
+			return r.fullTarget
+		default:
+			gn, err := strconv.Atoi(pattern)
+			if err != nil {
+				log.Fatal("Implementation error, couldn't parse ", pattern, " as an int: ", err)
+			}
+			if gn*2 >= len(r.groups) || r.groups[gn*2] == -1 {
+				return ""
+			}
+			return r.target[r.groups[gn*2]:r.groups[gn*2+1]]
+		}
+	})
 }

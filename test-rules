@@ -1,3 +1,17 @@
+matches [a-zA-Z0-9_\-./:]+
+matches ([a-zA-Z0-9_\-./]+):(\d+):(\d+)
+isfile $1
+echo e $file
+echo exec $2g$3l
+
+matches [a-zA-Z0-9_\-./:]+
+matches ([a-zA-Z0-9_\-./]+):(\d+):?
+isfile $1
+echo e $file
+echo exec $2g
+
 matches [a-zA-Z0-9_\-./]+
-matches [a-zA-Z0-9_\-./]+
-echo :e $0
+isfile $0
+echo e $file
+
+echo echo "$fulltarget" did not match any rules
