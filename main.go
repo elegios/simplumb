@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var (
@@ -81,6 +82,9 @@ func attemptRule(target string, scanner *bufio.Scanner) bool {
 
 	defer readTillEndOfRule(scanner)
 	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "#") {
+			continue
+		}
 		cmd := cmdRe.FindStringSubmatch(scanner.Text())
 		if cmd == nil {
 			return true
