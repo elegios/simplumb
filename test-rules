@@ -1,17 +1,44 @@
-matches [a-zA-Z0-9_\-./:]+
-matches ([a-zA-Z0-9_\-./]+):(\d+):(\d+)
+#open directory in finder
+matches [~a-zA-Z0-9_\-./]+
+isdir $0
+sh open $dir
+
+#open binary files in the default program
+matches [~a-zA-Z0-9_\-./]+
+isfile $0
+sh file -b --mime $file | grep -q binary
+sh open $file
+
+#follow line and column markers
+matches [~a-zA-Z0-9_\-./:]+
+matches ([~a-zA-Z0-9_\-./]+):(\d+):(\d+):?
 isfile $1
 echo e $file
 echo exec $2g$3l
 
-matches [a-zA-Z0-9_\-./:]+
-matches ([a-zA-Z0-9_\-./]+):(\d+):?
+#follow line markers
+matches [~a-zA-Z0-9_\-./:]+
+matches ([~a-zA-Z0-9_\-./]+):(\d+):?
 isfile $1
 echo e $file
 echo exec $2g
 
-matches [a-zA-Z0-9_\-./]+
+#follow search marker
+matches [~a-zA-Z0-9_\\\-./:]+
+matches ([~a-zA-Z0-9_\-./]+):/(.+)
+isfile $1
+echo e $file
+echo exec /$2<ret>
+
+#open any other file
+matches [~a-zA-Z0-9_\-./]+
 isfile $0
 echo e $file
 
+#open a url
+matches [~a-zA-Z0-9_\-./:]+
+matches \w+://.+
+sh open $0
+
+#default fail rule, just to give some feedback
 echo echo "$fulltarget" did not match any rules
