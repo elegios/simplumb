@@ -36,7 +36,7 @@ isfile $0
 echo e $file
 
 #open a url
-matches [~a-zA-Z0-9_\-./:]+
+matches [~a-zA-Z0-9_\-./:?&=]+
 matches \w+://.+
 sh open $0
 

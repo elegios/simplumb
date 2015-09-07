@@ -22,13 +22,13 @@ var (
 )
 
 var (
-	plumbPath  = flag.String("rule-file", "~/.kak-plumb", "The path to the rules file")
+	plumbPath  = flag.String("rule-file", "~/.simplumb", "The path to the rules file")
 	workingDir = flag.String("working-dir", ".", "The path to the directory in which the source is located")
 	cursor     = flag.Int("cursor", 0, "The position within the string at which the cursor was, if applicable")
 )
 
 func init() {
-	flag.StringVar(plumbPath, "r", "~/.kak-plumb", "The path to the rules file")
+	flag.StringVar(plumbPath, "r", "~/.simplumb", "The path to the rules file")
 	flag.StringVar(workingDir, "d", ".", "The path to the directory in which the source is located")
 	flag.IntVar(cursor, "c", 0, "The position within the string at which the cursor was, if applicable")
 }
