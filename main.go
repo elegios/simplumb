@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -114,6 +115,11 @@ func attemptRule(target string, scanner *bufio.Scanner) bool {
 				return false
 			}
 
+		case "sh":
+			if !sh(state, cmd[2]) {
+				return false
+			}
+
 		default:
 			log.Fatal("Could not parse line: ", scanner.Text())
 		}
@@ -211,6 +217,14 @@ func checkpath(r *ruleState, arg string, kind string) bool {
 		r.file = path
 	}
 	return (kind == "dir") == fi.IsDir()
+}
+
+func sh(r ruleState, arg string) bool {
+	cmd := exec.Command("sh", "-c", format(arg, r))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	return err == nil
 }
 
 func format(template string, r ruleState) string {
